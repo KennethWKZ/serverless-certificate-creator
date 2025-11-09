@@ -8,6 +8,10 @@ const mkdirp = require('mkdirp');
 const semver = require('semver')
 var packageJson = require('./package.json');
 
+// AWS SDK v3 imports
+const { Route53Client, ListHostedZonesCommand, ChangeResourceRecordSetsCommand, ListResourceRecordSetsCommand } = require('@aws-sdk/client-route53');
+const { ACMClient, ListCertificatesCommand, ListTagsForCertificateCommand, RemoveTagsFromCertificateCommand, AddTagsToCertificateCommand, RequestCertificateCommand, DescribeCertificateCommand, DeleteCertificateCommand, waitUntilCertificateValidated } = require('@aws-sdk/client-acm');
+
 const unsupportedRegionPrefixes = ['cn-'];
 
 class CreateCertificatePlugin {
@@ -75,7 +79,7 @@ class CreateCertificatePlugin {
         const customCertificate = this.getCustomCertificateDetails() || {};
 
         const credentials = this.serverless.providers.aws.getCredentials();
-        this.route53 = new this.serverless.providers.aws.sdk.Route53(credentials);
+        this.route53 = new Route53Client(credentials);
         this.region = customCertificate.region || 'us-east-1';
         this.domain = customCertificate.certificateName;
         //hostedZoneId is mapped for backwards compatibility
@@ -83,7 +87,7 @@ class CreateCertificatePlugin {
         //hostedZoneName is mapped for backwards compatibility
         this.hostedZoneNames = customCertificate.hostedZoneNames ? customCertificate.hostedZoneNames : (customCertificate.hostedZoneName) ? [].concat(customCertificate.hostedZoneName) : [];
         const acmCredentials = Object.assign({}, credentials, { region: this.region });
-        this.acm = new this.serverless.providers.aws.sdk.ACM(acmCredentials);
+        this.acm = new ACMClient(acmCredentials);
         this.idempotencyToken = customCertificate.idempotencyToken;
         this.writeCertInfoToFile = customCertificate.writeCertInfoToFile || false;
         this.rewriteRecords = customCertificate.rewriteRecords || false;
@@ -139,7 +143,7 @@ class CreateCertificatePlugin {
   }
 
   listCertificates(NextToken) {
-    return this.acm.listCertificates({ NextToken }).promise()
+    return this.acm.send(new ListCertificatesCommand({ NextToken }))
       .then(data => {
         if (data.NextToken) {
           return this.listCertificates(data.NextToken)
@@ -158,14 +162,14 @@ class CreateCertificatePlugin {
       CertificateArn: certificateArn
     };
 
-    return this.acm.listTagsForCertificate(listTagsRequest).promise().then(listTagsResult => {
+    return this.acm.send(new ListTagsForCertificateCommand(listTagsRequest)).then(listTagsResult => {
 
       if (listTagsResult.Tags && listTagsResult.Tags.length > 0) {
         const removeTagsRequest = {
           CertificateArn: certificateArn,
           Tags: listTagsResult.Tags
         };
-        return this.acm.removeTagsFromCertificate(removeTagsRequest).promise();
+        return this.acm.send(new RemoveTagsFromCertificateCommand(removeTagsRequest));
       } else {
         return Promise.resolve();
       }
@@ -194,7 +198,7 @@ class CreateCertificatePlugin {
         }
 
         this.serverless.cli.log(`tagging certificate`);
-        return this.acm.addTagsToCertificate(tagRequest).promise().catch(error => {
+        return this.acm.send(new AddTagsToCertificateCommand(tagRequest)).catch(error => {
           this.serverless.cli.log('tagging certificate failed', error);
           console.log('problem', error);
           throw error;
@@ -263,14 +267,14 @@ class CreateCertificatePlugin {
         params.SubjectAlternativeNames = this.subjectAlternativeNames
       }
 
-      return this.acm.requestCertificate(params).promise().then(requestCertificateResponse => {
+      return this.acm.send(new RequestCertificateCommand(params)).then(requestCertificateResponse => {
         this.serverless.cli.log(`requested cert: ${requestCertificateResponse.CertificateArn}`);
 
         var params = {
           CertificateArn: requestCertificateResponse.CertificateArn
         };
 
-        return delay(10000).then(() => this.acm.describeCertificate(params).promise().then(certificate => {
+        return delay(10000).then(() => this.acm.send(new DescribeCertificateCommand(params)).then(certificate => {
           this.serverless.cli.log(`got cert info: ${certificate.Certificate.CertificateArn} - ${certificate.Certificate.Status}`);
           return this.createRecordSetForDnsValidation(certificate)
             .then(() => this.tagCertificate(certificate.Certificate.CertificateArn))
@@ -319,9 +323,9 @@ class CreateCertificatePlugin {
         CertificateArn: existingCert.CertificateArn
       };
 
-      return this.acm.describeCertificate(params).promise()
+      return this.acm.send(new DescribeCertificateCommand(params))
         .then(certificate => this.deleteRecordSetForDnsValidation(certificate))
-        .then(() => this.acm.deleteCertificate(params).promise())
+        .then(() => this.acm.send(new DeleteCertificateCommand(params)))
         .then(() => this.serverless.cli.log(`deleted cert: ${existingCert.CertificateArn}`))
         .catch(error => {
           this.serverless.cli.log('could not delete cert', error);
@@ -342,7 +346,7 @@ class CreateCertificatePlugin {
     var params = {
       CertificateArn: certificateArn /* required */
     };
-    return this.acm.waitFor('certificateValidated', params).promise().then(data => {
+    return waitUntilCertificateValidated({ client: this.acm, maxWaitTime: 900 }, params).then(data => {
       this.serverless.cli.log(`cert was successfully created and validated and can be used now`);
       this.writeCertificateInfoToFile(certificateArn);
     }).catch(error => {
@@ -354,7 +358,7 @@ class CreateCertificatePlugin {
 
   getHostedZoneIds() {
 
-    return this.route53.listHostedZones({}).promise().then(data => {
+    return this.route53.send(new ListHostedZonesCommand({})).then(data => {
 
       let hostedZones = data.HostedZones.filter(x => this.hostedZoneIds.includes(x.Id.replace(/\/hostedzone\//g, '')) || this.hostedZoneNames.includes(x.Name));
 
@@ -403,7 +407,7 @@ class CreateCertificatePlugin {
           },
           HostedZoneId: hostedZoneId
         };
-        return this.route53.changeResourceRecordSets(params).promise().then(recordSetResult => {
+        return this.route53.send(new ChangeResourceRecordSetsCommand(params)).then(recordSetResult => {
           this.serverless.cli.log('dns validation record(s) created - certificate is ready for use after validation has gone through');
         }).catch(error => {
           this.serverless.cli.log('could not create record set for dns validation', error);
@@ -457,7 +461,7 @@ class CreateCertificatePlugin {
             },
             HostedZoneId: hostedZoneId
           };
-          return this.route53.changeResourceRecordSets(params).promise().then(recordSetResult => {
+          return this.route53.send(new ChangeResourceRecordSetsCommand(params)).then(recordSetResult => {
             this.serverless.cli.log(`${changes.length} dns validation record(s) deleted`);
           }).catch(error => {
             this.serverless.cli.log('could not delete record set(s) for dns validation', error);
@@ -479,7 +483,7 @@ class CreateCertificatePlugin {
 
     this.serverless.cli.log('listing existing record sets in hosted zone', hostedZoneId);
 
-    let listRecords = (params) => this.route53.listResourceRecordSets(params).promise()
+    let listRecords = (params) => this.route53.send(new ListResourceRecordSetsCommand(params))
       .then(({ ResourceRecordSets, IsTruncated, NextRecordName, NextRecordType, NextRecordIdentifier }) => {
 
         if (IsTruncated) {

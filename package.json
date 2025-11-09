@@ -1,28 +1,31 @@
 {
-  "name": "serverless-certificate-creator",
+  "name": "serverless-certificate-creator-v3",
   "version": "1.6.0",
   "description": "creates a certificate that can be used for custom domains for your api gateway",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "deploy": "np --no-tests"
   },
-  "author": "schwamster",
+  "author": "kennethwkz",
   "license": "MIT",
   "dependencies": {
-    "aws-sdk": "^2.320.0",
-    "chalk": "^2.4.2",
-    "delay": "^4.3.0",
-    "mkdirp": "^1.0.4",
-    "semver": "^7.3.4",
+    "@aws-sdk/client-acm": "^3.927.0",
+    "@aws-sdk/client-route-53": "^3.927.0",
+    "chalk": "^5.6.2",
+    "delay": "^7.0.0",
+    "mkdirp": "^3.0.1",
     "yamljs": "^0.3.0"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "np": "^10.2.0"
+  },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/schwamster/serverless-certificate-creator.git"
+    "url": "git+https://github.com/kennethwkz/serverless-certificate-creator.git"
   },
   "bugs": {
-    "url": "https://github.com/schwamster/serverless-certificate-creator/issues"
+    "url": "https://github.com/kennethwkz/serverless-certificate-creator/issues"
   },
-  "homepage": "https://github.com/schwamster/serverless-certificate-creator#readme"
+  "homepage": "https://github.com/kennethwkz/serverless-certificate-creator#readme"
 }
