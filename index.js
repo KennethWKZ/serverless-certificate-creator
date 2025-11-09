@@ -1,5 +1,5 @@
 'use strict';
-const delay = require('delay');
+import {setTimeout} from 'node:timers/promises';
 const chalk = require('chalk');
 const fs = require('fs');
 const path = require('path');
@@ -9,7 +9,7 @@ const semver = require('semver')
 var packageJson = require('./package.json');
 
 // AWS SDK v3 imports
-const { Route53Client, ListHostedZonesCommand, ChangeResourceRecordSetsCommand, ListResourceRecordSetsCommand } = require('@aws-sdk/client-route53');
+const { Route53Client, ListHostedZonesCommand, ChangeResourceRecordSetsCommand, ListResourceRecordSetsCommand } = require('@aws-sdk/client-route-53');
 const { ACMClient, ListCertificatesCommand, ListTagsForCertificateCommand, RemoveTagsFromCertificateCommand, AddTagsToCertificateCommand, RequestCertificateCommand, DescribeCertificateCommand, DeleteCertificateCommand, waitUntilCertificateValidated } = require('@aws-sdk/client-acm');
 
 const unsupportedRegionPrefixes = ['cn-'];
@@ -274,7 +274,7 @@ class CreateCertificatePlugin {
           CertificateArn: requestCertificateResponse.CertificateArn
         };
 
-        return delay(10000).then(() => this.acm.send(new DescribeCertificateCommand(params)).then(certificate => {
+        return setTimeout(10000).then(() => this.acm.send(new DescribeCertificateCommand(params)).then(certificate => {
           this.serverless.cli.log(`got cert info: ${certificate.Certificate.CertificateArn} - ${certificate.Certificate.Status}`);
           return this.createRecordSetForDnsValidation(certificate)
             .then(() => this.tagCertificate(certificate.Certificate.CertificateArn))
