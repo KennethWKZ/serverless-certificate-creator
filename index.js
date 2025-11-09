@@ -95,16 +95,19 @@ class CreateCertificatePlugin {
         this.domain = customCertificate.certificateName;
         //hostedZoneId is mapped for backwards compatibility
         this.hostedZoneIds = customCertificate.hostedZoneIds
-          ? customCertificate.hostedZoneIds
+          ? [].concat(customCertificate.hostedZoneIds)
           : customCertificate.hostedZoneId
           ? [].concat(customCertificate.hostedZoneId)
           : [];
         //hostedZoneName is mapped for backwards compatibility
         this.hostedZoneNames = customCertificate.hostedZoneNames
-          ? customCertificate.hostedZoneNames
+          ? [].concat(customCertificate.hostedZoneNames)
           : customCertificate.hostedZoneName
           ? [].concat(customCertificate.hostedZoneName)
           : [];
+        this.hostedZoneNames = this.hostedZoneNames.map((name) =>
+          name.toLowerCase()
+        );
         const acmCredentials = Object.assign({}, credentials, {
           region: this.region,
         });
@@ -455,8 +458,20 @@ class CreateCertificatePlugin {
     return this.getHostedZoneIds().then((hostedZoneIds) => {
       return Promise.all(
         hostedZoneIds.map(({ hostedZoneId, Name }) => {
-          let changes = certificate.Certificate.DomainValidationOptions.filter(
-            ({ DomainName }) => DomainName.endsWith(Name)
+          let changes = Array.from(
+            certificate.Certificate.DomainValidationOptions.filter(
+              ({ DomainName }) => DomainName.endsWith(Name)
+            )
+              // Ensure unique Type-Name pairs
+              .reduce(
+                (map, record) =>
+                  map.set(
+                    `${record.ResourceRecord.Type}-${record.ResourceRecord.Name}`,
+                    record
+                  ),
+                new Map()
+              )
+              .values()
           ).map((x) => {
             return {
               Action: this.rewriteRecords ? "UPSERT" : "CREATE",
@@ -511,31 +526,41 @@ class CreateCertificatePlugin {
           // otherwise the whole batch will fail
           return this.listResourceRecordSets(hostedZoneId).then(
             (existingRecords) => {
-              let changes =
+              let changes = Array.from(
                 certificate.Certificate.DomainValidationOptions.filter(
                   ({ DomainName }) => DomainName.endsWith(Name)
                 )
                   .map((opt) => opt.ResourceRecord)
-                  .filter((record) =>
-                    existingRecords.find(
-                      (x) => x.Name === record.Name && x.Type === record.Type
-                    )
+                  // Ensure unique record Type-Name pairs
+                  .reduce(
+                    (map, record) =>
+                      map.set(`${record.Type}-${record.Name}`, record),
+                    new Map()
                   )
-                  .map((record) => {
-                    return {
-                      Action: "DELETE",
-                      ResourceRecordSet: {
-                        Name: record.Name,
-                        ResourceRecords: [
-                          {
-                            Value: record.Value,
-                          },
-                        ],
-                        TTL: 60,
-                        Type: record.Type,
-                      },
-                    };
-                  });
+                  .values()
+              )
+                .filter(({ DomainName }) => DomainName.endsWith(Name))
+                .map((opt) => opt.ResourceRecord)
+                .filter((record) =>
+                  existingRecords.find(
+                    (x) => x.Name === record.Name && x.Type === record.Type
+                  )
+                )
+                .map((record) => {
+                  return {
+                    Action: "DELETE",
+                    ResourceRecordSet: {
+                      Name: record.Name,
+                      ResourceRecords: [
+                        {
+                          Value: record.Value,
+                        },
+                      ],
+                      TTL: 60,
+                      Type: record.Type,
+                    },
+                  };
+                });
 
               if (changes.length === 0) {
                 this.serverless.cli.log(
@@ -662,11 +687,12 @@ class CreateCertificatePlugin {
         } else {
           this.serverless.cli.consoleLog(
             chalk.yellow(
-              "Warning, certificate or certificate property was not found. Returning an empty string instead!"
+              "Warning, certificate or certificate property was not found. Returning a null value instead!"
             )
           );
+
           return {
-            value: "",
+            value: null,
           };
         }
       })
