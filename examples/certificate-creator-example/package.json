@@ -1,6 +1,7 @@
 {
   "name": "certificate-creator-example",
   "version": "1.0.0",
+  "type": "module",
   "description": "",
   "main": "handler.js",
   "scripts": {
