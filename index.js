@@ -527,7 +527,7 @@ class CreateCertificatePlugin {
                 certificate.Certificate.DomainValidationOptions.filter(
                   ({ DomainName }) => DomainName.endsWith(Name)
                 )
-                  .map((opt) => opt.ResourceRecord)
+                  .map((opt) => opt)
                   // Ensure unique record Type-Name pairs
                   .reduce(
                     (map, record) =>
@@ -536,7 +536,7 @@ class CreateCertificatePlugin {
                   )
                   .values()
               )
-                .filter(({ DomainName }) => DomainName.endsWith(Name))
+                .filter(({ DomainName }) => DomainName?.endsWith(Name))
                 .map((opt) => opt.ResourceRecord)
                 .filter((record) =>
                   existingRecords.find(
