@@ -13,6 +13,7 @@ import {
   AddTagsToCertificateCommand,
   DeleteCertificateCommand,
   DescribeCertificateCommand,
+  KeyAlgorithm,
   ListCertificatesCommand,
   ListTagsForCertificateCommand,
   RemoveTagsFromCertificateCommand,
@@ -93,6 +94,7 @@ class CreateCertificatePlugin {
         this.route53 = new Route53Client(credentials);
         this.region = customCertificate.region || "us-east-1";
         this.domain = customCertificate.certificateName;
+        this.keyAlgorithm = customCertificate.keyAlgorithm || KeyAlgorithm.EC_prime256v1;
         //hostedZoneId is mapped for backwards compatibility
         this.hostedZoneIds = customCertificate.hostedZoneIds
           ? customCertificate.hostedZoneIds
@@ -289,6 +291,7 @@ class CreateCertificatePlugin {
           DomainName: this.domain,
           ValidationMethod: "DNS",
           IdempotencyToken: this.idempotencyToken,
+          KeyAlgorithm: this.keyAlgorithm,
         };
 
         if (
