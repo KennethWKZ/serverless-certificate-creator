@@ -84,13 +84,40 @@ class CreateCertificatePlugin {
     return (this.serverless.service.custom || {}).customCertificate || null;
   }
 
-  initializeVariables() {
+  /**
+   * Resolve AWS client credentials/configuration in a framework-aware way.
+   * osls v4 removed providers.aws.getCredentials() (throws
+   * AWS_SDK_V2_SURFACE_REMOVED); credentials come from
+   * provider.getAwsSdkV3Config().credentials instead. The returned shape
+   * ({ credentials, region }) is stable across v3 and v4 so the existing
+   * Object.assign/spread in initializeVariables keeps working.
+   */
+  async resolveCredentialsConfig() {
+    const awsProvider = this.serverless.providers.aws;
+    if (typeof awsProvider.getAwsSdkV3Config === "function") {
+      try {
+        const cfg = await awsProvider.getAwsSdkV3Config();
+        return { credentials: cfg.credentials, region: cfg.region };
+      } catch {
+        return {};
+      }
+    }
+    try {
+      return typeof awsProvider.getCredentials === "function"
+        ? awsProvider.getCredentials()
+        : {};
+    } catch {
+      return {};
+    }
+  }
+
+  async initializeVariables() {
     if (!this.initialized) {
       this.enabled = this.evaluateEnabled();
       if (this.enabled) {
         const customCertificate = this.getCustomCertificateDetails() || {};
 
-        const credentials = this.serverless.providers.aws.getCredentials();
+        const credentials = await this.resolveCredentialsConfig();
         this.route53 = new Route53Client(credentials);
         this.region = customCertificate.region || "us-east-1";
         this.domain = customCertificate.certificateName;
@@ -269,8 +296,8 @@ class CreateCertificatePlugin {
   /**
    * Creates a certificate for the given options set in serverless.yml under custom->customCertificate
    */
-  createCertificate() {
-    this.initializeVariables();
+  async createCertificate() {
+    await this.initializeVariables();
     if (!this.enabled) {
       return this.reportDisabled();
     }
@@ -355,8 +382,8 @@ class CreateCertificatePlugin {
    * Deletes the certificate for the given options set in serverless.yml under custom->customCertificate
    * (if it exists)
    */
-  deleteCertificate() {
-    this.initializeVariables();
+  async deleteCertificate() {
+    await this.initializeVariables();
     if (!this.enabled) {
       return this.reportDisabled();
     }
@@ -648,8 +675,8 @@ class CreateCertificatePlugin {
   /**
    * Prints out a summary of all certificate related info
    */
-  certificateSummary() {
-    this.initializeVariables();
+  async certificateSummary() {
+    await this.initializeVariables();
     if (!this.enabled) {
       return this.reportDisabled();
     }
@@ -670,7 +697,7 @@ class CreateCertificatePlugin {
     const property = address;
     const domainName = params[0];
 
-    this.initializeVariables();
+    await this.initializeVariables();
     if (!this.enabled) {
       return Promise.resolve("");
     }
@@ -705,8 +732,8 @@ class CreateCertificatePlugin {
       });
   }
 
-  getCertificatePropertyOld(src) {
-    this.initializeVariables();
+  async getCertificatePropertyOld(src) {
+    await this.initializeVariables();
     if (!this.enabled) {
       return Promise.resolve("");
     }
