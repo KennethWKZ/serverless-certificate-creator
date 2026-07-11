@@ -686,6 +686,12 @@ class CreateCertificatePlugin {
       );
 
       this.serverless.cli.consoleLog(chalk.yellow("Certificate"));
+      if (!existingCertificate) {
+        this.serverless.cli.consoleLog(
+          `  No certificate found for ${this.domain}`
+        );
+        return true;
+      }
       this.serverless.cli.consoleLog(
         `  ${existingCertificate.CertificateArn} => ${existingCertificate.DomainName}`
       );
