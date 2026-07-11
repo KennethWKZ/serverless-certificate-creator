@@ -191,7 +191,15 @@ class CreateCertificatePlugin {
 
   listCertificates(NextToken) {
     return this.acm
-      .send(new ListCertificatesCommand({ NextToken }))
+      .send(
+        new ListCertificatesCommand({
+          NextToken,
+          // ACM ListCertificates defaults to RSA_1024/RSA_2048 only; without
+          // Includes.keyTypes every EC-key certificate is silently omitted,
+          // so getExistingCertificate/the certificate: resolver miss them.
+          Includes: { keyTypes: Object.values(KeyAlgorithm) },
+        })
+      )
       .then((data) => {
         if (data.NextToken) {
           return this.listCertificates(data.NextToken).then((moreData) => [
